@@ -1,0 +1,63 @@
+# Dependencies
+/node_modules
+/.pnp
+.pnp.js
+
+# Testing
+/coverage
+
+# Production / Builds
+/dist
+/build
+/out
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.swp
+.kiro/
+.vercel/
+
+# System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Logs and Debug
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+bun-debug.log*
+
+# Local Env Files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+.env*.local
+
+# Go Binaries and Build Artifacts
+/agent/node-agent
+/agent/*.exe
+/agent/*.test
+/agent/*.prof
+/proxy/proxy
+/proxy/*.exe
+/proxy/*.test
+/proxy/*.prof
+
+# Lock Files (using bun.lock, ignore others)
+package-lock.json
+yarn.lock
+pnpm-lock.yaml

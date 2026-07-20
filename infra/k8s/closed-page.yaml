@@ -1,0 +1,213 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: looking-glass-closed-html
+  namespace: default
+data:
+  index.html: |
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+      <meta charset="UTF-8">
+      <meta name="viewport" content="width=device-width, initial-scale=1.0">
+      <title>Looking Glass — Service Terminated</title>
+      <link rel="preconnect" href="https://fonts.googleapis.com">
+      <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+      <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+      <style>
+        * {
+          box-sizing: border-box;
+          margin: 0;
+          padding: 0;
+        }
+
+        body {
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+          background-color: #000000;
+          color: #ffffff;
+          min-height: 100vh;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+        }
+
+        .card {
+          max-width: 440px;
+          width: 100%;
+          background-color: #0a0a0a;
+          border: 1px solid rgba(255, 255, 255, 0.08);
+          border-radius: 20px;
+          padding: 36px 30px;
+          display: flex;
+          flex-direction: column;
+          align-items: flex-start;
+          box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        .status {
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 1.5px;
+          color: #ff3b30;
+          margin-bottom: 20px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-weight: 500;
+        }
+
+        .status::before {
+          content: '';
+          display: block;
+          width: 5px;
+          height: 5px;
+          background-color: #ff3b30;
+          border-radius: 50%;
+        }
+
+        h1 {
+          font-size: 20px;
+          font-weight: 400;
+          letter-spacing: -0.3px;
+          margin-bottom: 14px;
+          line-height: 1.3;
+        }
+
+        p {
+          font-size: 13.5px;
+          line-height: 1.6;
+          color: #8e8e93;
+          font-weight: 300;
+          margin-bottom: 30px;
+        }
+
+        p strong {
+          color: #ffffff;
+          font-weight: 400;
+        }
+
+        .btn {
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
+          width: 100%;
+          padding: 14px 20px;
+          background-color: #ffffff;
+          color: #000000;
+          border: none;
+          border-radius: 12px;
+          font-size: 14px;
+          font-weight: 500;
+          text-decoration: none;
+          transition: opacity 0.2s, transform 0.1s;
+          text-align: center;
+        }
+
+        .btn:hover {
+          opacity: 0.9;
+        }
+
+        .btn:active {
+          transform: scale(0.98);
+        }
+
+        .subtext {
+          margin-top: 20px;
+          font-size: 11px;
+          line-height: 1.4;
+          color: #48484a;
+          font-weight: 300;
+          text-align: left;
+        }
+      </style>
+    </head>
+    <body>
+
+      <div class="card">
+        <div class="status">Offline</div>
+        
+        <h1>Looking Glass отключен</h1>
+        
+        <p>
+          Этот сервис диагностики сети был заблокирован разработчиком и прекратил работу. Владелец хостинг-проектов <strong>Intezio</strong> и <strong>1cent</strong> не оплатил разработку данного Looking Glass, а также выполненные работы по поддержке пользователей.
+        </p>
+
+        <a href="https://github.com/xdearboy/intezio-looking-glass" class="btn">
+          Исходный код на GitHub
+        </a>
+
+        <div class="subtext">
+          Вы можете бесплатно скачать исходный код и развернуть собственную копию утилиты Looking Glass.
+        </div>
+      </div>
+
+    </body>
+    </html>
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: looking-glass-closed
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: looking-glass-closed
+  template:
+    metadata:
+      labels:
+        app: looking-glass-closed
+    spec:
+      containers:
+      - name: nginx
+        image: nginx:alpine
+        ports:
+        - containerPort: 80
+        volumeMounts:
+        - name: html-volume
+          mountPath: /usr/share/nginx/html
+      volumes:
+      - name: html-volume
+        configMap:
+          name: looking-glass-closed-html
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: looking-glass-closed
+  namespace: default
+spec:
+  ports:
+  - port: 80
+    targetPort: 80
+  selector:
+    app: looking-glass-closed
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: looking-glass-closed
+  namespace: default
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    haproxy.org/timeout-client: "30s"
+    haproxy.org/timeout-server: "30s"
+spec:
+  ingressClassName: haproxy
+  tls:
+    - hosts:
+        - lg.intezio.net
+      secretName: looking-glass-tls
+  rules:
+    - host: lg.intezio.net
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: looking-glass-closed
+                port:
+                  number: 80

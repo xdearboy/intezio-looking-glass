@@ -1,0 +1,67 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: agent-secret-estonia
+type: Opaque
+stringData:
+  AGENT_SECRET: "<YOUR_ESTONIA_AGENT_SECRET_BASE64>"
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent-estonia
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: agent-estonia
+  template:
+    metadata:
+      labels:
+        app: agent-estonia
+    spec:
+      nodeSelector:
+        kubernetes.io/hostname: "<YOUR_ESTONIA_NODE_HOSTNAME>"
+      hostNetwork: true
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: agent
+          image: ghcr.io/xdearboy/node-agent:latest
+          ports:
+            - containerPort: 8080
+          env:
+            - name: AGENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: agent-secret-estonia
+                  key: AGENT_SECRET
+            - name: AGENT_PORT
+              value: "8080"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: agent-estonia
+spec:
+  type: ClusterIP
+  selector:
+    app: agent-estonia
+  ports:
+    - port: 8080
+      targetPort: 8080

@@ -1,0 +1,246 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+
+env:
+  GHCR_IMAGE: ghcr.io/xdearboy/looking-glass
+  PROXY_IMAGE: ghcr.io/xdearboy/looking-glass-proxy
+  AGENT_IMAGE: ghcr.io/xdearboy/node-agent
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+  DOCKER_BUILD_SUMMARY: false
+  DOCKER_BUILD_RECORD_UPLOAD: false
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      frontend: ${{ steps.filter.outputs.frontend_any_changed }}
+      proxy: ${{ steps.filter.outputs.proxy_any_changed }}
+      agent: ${{ steps.filter.outputs.agent_any_changed }}
+      k8s_frontend: ${{ steps.filter.outputs.k8s_frontend_any_changed }}
+      k8s_proxy: ${{ steps.filter.outputs.k8s_proxy_any_changed }}
+      k8s_agent: ${{ steps.filter.outputs.k8s_agent_any_changed }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: tj-actions/changed-files@v46
+        id: filter
+        with:
+          files_yaml: |
+            frontend:
+              - 'src/**'
+              - 'messages/**'
+              - 'public/**'
+              - 'index.html'
+              - 'vite.config.ts'
+              - 'package.json'
+              - 'bun.lock'
+              - 'Dockerfile'
+              - 'nginx.conf'
+              - 'tailwind.config.js'
+              - 'tsconfig.json'
+            proxy:
+              - 'proxy/**'
+            agent:
+              - 'agent/**'
+              - '!agent/k8s/**'
+            k8s_frontend:
+              - 'infra/k8s/looking-glass.yaml'
+              - 'infra/k8s/agent-ingress.yaml'
+            k8s_proxy:
+              - 'infra/k8s/proxy.yaml'
+            k8s_agent:
+              - 'infra/k8s/agent/**'
+
+  deploy-frontend:
+    name: Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true' ||
+      needs.changes.outputs.k8s_frontend == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Lint
+        if: needs.changes.outputs.frontend == 'true'
+        run: bunx biome ci .
+
+      - name: Set up Docker Buildx
+        if: needs.changes.outputs.frontend == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: needs.changes.outputs.frontend == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        if: needs.changes.outputs.frontend == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: |
+            ${{ env.GHCR_IMAGE }}:latest
+            ${{ env.GHCR_IMAGE }}:${{ github.sha }}
+          cache-from: type=local,src=/tmp/.buildx-cache-frontend
+          cache-to: type=local,dest=/tmp/.buildx-cache-frontend-new,mode=max
+          provenance: false
+          sbom: false
+
+      - name: Move cache
+        if: needs.changes.outputs.frontend == 'true'
+        run: |
+          rm -rf /tmp/.buildx-cache-frontend
+          mv /tmp/.buildx-cache-frontend-new /tmp/.buildx-cache-frontend || true
+
+      - name: Apply k8s configs
+        if: needs.changes.outputs.k8s_frontend == 'true'
+        run: |
+          kubectl apply -f infra/k8s/looking-glass.yaml
+          kubectl apply -f infra/k8s/agent-ingress.yaml
+
+      - name: Deploy image
+        if: needs.changes.outputs.frontend == 'true'
+        run: |
+          kubectl set image deployment/looking-glass \
+            looking-glass=${{ env.GHCR_IMAGE }}:${{ github.sha }}
+
+      - name: Wait
+        if: needs.changes.outputs.frontend == 'true'
+        run: kubectl rollout status deployment/looking-glass --timeout=120s
+
+  deploy-proxy:
+    name: Proxy
+    needs: changes
+    if: needs.changes.outputs.proxy == 'true' || needs.changes.outputs.k8s_proxy ==
+      'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        if: needs.changes.outputs.proxy == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: needs.changes.outputs.proxy == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        if: needs.changes.outputs.proxy == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./proxy
+          push: true
+          tags: |
+            ${{ env.PROXY_IMAGE }}:latest
+            ${{ env.PROXY_IMAGE }}:${{ github.sha }}
+          cache-from: type=local,src=/tmp/.buildx-cache-proxy
+          cache-to: type=local,dest=/tmp/.buildx-cache-proxy-new,mode=max
+          provenance: false
+          sbom: false
+
+      - name: Move cache
+        if: needs.changes.outputs.proxy == 'true'
+        run: |
+          rm -rf /tmp/.buildx-cache-proxy
+          mv /tmp/.buildx-cache-proxy-new /tmp/.buildx-cache-proxy || true
+
+      - name: Apply k8s configs
+        if: needs.changes.outputs.k8s_proxy == 'true'
+        run: kubectl apply -f infra/k8s/proxy.yaml
+
+      - name: Deploy image
+        if: needs.changes.outputs.proxy == 'true'
+        run: |
+          kubectl set image deployment/looking-glass-proxy \
+            proxy=${{ env.PROXY_IMAGE }}:${{ github.sha }}
+
+      - name: Wait
+        if: needs.changes.outputs.proxy == 'true'
+        run: kubectl rollout status deployment/looking-glass-proxy --timeout=120s
+
+  deploy-agent:
+    name: Agent
+    needs: changes
+    if: needs.changes.outputs.agent == 'true' || needs.changes.outputs.k8s_agent ==
+      'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        if: needs.changes.outputs.agent == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to GHCR
+        if: needs.changes.outputs.agent == 'true'
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build & push
+        if: needs.changes.outputs.agent == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ./agent
+          push: true
+          tags: |
+            ${{ env.AGENT_IMAGE }}:latest
+            ${{ env.AGENT_IMAGE }}:${{ github.sha }}
+          cache-from: type=local,src=/tmp/.buildx-cache-agent
+          cache-to: type=local,dest=/tmp/.buildx-cache-agent-new,mode=max
+          provenance: false
+          sbom: false
+
+      - name: Move cache
+        if: needs.changes.outputs.agent == 'true'
+        run: |
+          rm -rf /tmp/.buildx-cache-agent
+          mv /tmp/.buildx-cache-agent-new /tmp/.buildx-cache-agent || true
+
+      - name: Apply k8s configs
+        if: needs.changes.outputs.k8s_agent == 'true'
+        run: |
+          kubectl apply -f infra/k8s/agent/germany.yaml
+          kubectl apply -f infra/k8s/agent/estonia.yaml
+          kubectl apply -f infra/k8s/agent/netherlands.yaml
+          kubectl apply -f infra/k8s/agent/poland.yaml
+
+      - name: Deploy image
+        if: needs.changes.outputs.agent == 'true'
+        run: |
+          kubectl set image deployment/agent-germany agent=${{ env.AGENT_IMAGE }}:${{ github.sha }}
+          kubectl set image deployment/agent-estonia agent=${{ env.AGENT_IMAGE }}:${{ github.sha }}
+          kubectl set image deployment/agent-netherlands agent=${{ env.AGENT_IMAGE }}:${{ github.sha }}
+          kubectl set image deployment/agent-poland agent=${{ env.AGENT_IMAGE }}:${{ github.sha }}
+
+      - name: Wait
+        if: needs.changes.outputs.agent == 'true'
+        run: |
+          kubectl rollout status deployment/agent-germany --timeout=60s &
+          kubectl rollout status deployment/agent-estonia --timeout=60s &
+          kubectl rollout status deployment/agent-netherlands --timeout=60s &
+          kubectl rollout status deployment/agent-poland --timeout=60s &
+          wait

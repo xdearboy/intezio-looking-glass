@@ -1,0 +1,127 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-germany-public
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    haproxy.org/timeout-tunnel: "3600s"
+spec:
+  ingressClassName: haproxy
+  tls:
+    - hosts:
+        - lg-de.your-domain.com
+      secretName: agent-germany-tls
+  rules:
+    - host: lg-de.your-domain.com
+      http:
+        paths:
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-germany
+                port:
+                  number: 8080
+          - path: /testfile
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-germany
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-estonia-public
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    haproxy.org/timeout-tunnel: "3600s"
+spec:
+  ingressClassName: haproxy
+  tls:
+    - hosts:
+        - lg-ee.your-domain.com
+      secretName: agent-estonia-tls
+  rules:
+    - host: lg-ee.your-domain.com
+      http:
+        paths:
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-estonia
+                port:
+                  number: 8080
+          - path: /testfile
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-estonia
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-poland-public
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    haproxy.org/timeout-tunnel: "3600s"
+spec:
+  ingressClassName: haproxy
+  tls:
+    - hosts:
+        - lg-pl.your-domain.com
+      secretName: agent-poland-tls
+  rules:
+    - host: lg-pl.your-domain.com
+      http:
+        paths:
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-poland
+                port:
+                  number: 8080
+          - path: /testfile
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-poland
+                port:
+                  number: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: agent-netherlands-public
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    haproxy.org/timeout-tunnel: "3600s"
+spec:
+  ingressClassName: haproxy
+  tls:
+    - hosts:
+        - lg-nl.your-domain.com
+      secretName: agent-netherlands-tls
+  rules:
+    - host: lg-nl.your-domain.com
+      http:
+        paths:
+          - path: /health
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-netherlands
+                port:
+                  number: 8080
+          - path: /testfile
+            pathType: Prefix
+            backend:
+              service:
+                name: agent-netherlands
+                port:
+                  number: 8080
