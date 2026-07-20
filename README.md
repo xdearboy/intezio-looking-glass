@@ -1,5 +1,7 @@
 # Intezio Looking Glass (Leaked / Open Source)
 
+[English version](README_EN.md)
+
 Современный, высокопроизводительный и адаптивный Looking Glass инструмент для диагностики сети, маршрутизации и измерения пропускной способности каналов в реальном времени.
 
 ![Looking Glass Interface Screenshot](public/screenshot.png)
